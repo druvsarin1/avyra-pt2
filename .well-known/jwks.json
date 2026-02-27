@@ -1,0 +1,12 @@
+{
+  "keys": [
+    {
+      "e": "AQAB",
+      "kid": "chart-extraction-key-1",
+      "kty": "RSA",
+      "n": "56sNZewlZrdtra7drY_w-rrW0rCdtlLxaJKTgx97bS1H24ne4tx03vHK3Dx-uWLCkV_tt0wJF7NA_RBjbxo5Oz-RHGD4zO0c6hMle5IS9XNaSJZQkasUl-sW2PQoVu_Z1S6d2NEyQt_DNPLZ-BzvVO5iMSQ3JF0pJsUmNIKKwyiKD4LKsF4AgIirCYA7O1BAbpTDL8aXGzB9lEZOXVaAd3grFTIKgA1iSqABQHYUCChrWsMV5LL3gyIIfCJf6BykLYkbhgk4bbDXO-WCsHlMJOvX1U4X_EDLUD9BtKSHwBlGya1IBr1jYyJ4ghbY0dfdZL6rD6lZFTNE2rRs1FPl4Q",
+      "use": "sig",
+      "alg": "RS384"
+    }
+  ]
+}
