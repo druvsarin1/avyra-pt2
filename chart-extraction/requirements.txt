@@ -1,0 +1,7 @@
+anthropic
+requests
+streamlit
+pandas
+python-dotenv
+PyJWT
+cryptography
