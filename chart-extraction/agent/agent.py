@@ -1,4 +1,5 @@
 import os
+import json
 import anthropic
 from dotenv import load_dotenv
 from agent.tools import TOOL_SCHEMAS, TOOL_MAP
@@ -6,6 +7,14 @@ from agent.tools import TOOL_SCHEMAS, TOOL_MAP
 load_dotenv()
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+# ANSI colors for terminal output
+CYAN = "\033[96m"
+YELLOW = "\033[93m"
+GREEN = "\033[92m"
+DIM = "\033[2m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
 
 
 def run_extraction(mrn: str, study_context: str, variables: list[str]) -> dict:
@@ -34,9 +43,18 @@ Instructions:
         {"role": "user", "content": f"Please extract the requested variables for patient MRN: {mrn}"}
     ]
 
+    step = 0
+    print(f"\n{BOLD}{'='*60}{RESET}")
+    print(f"{BOLD}Agent started for MRN: {mrn}{RESET}")
+    print(f"{DIM}Variables: {', '.join(variables)}{RESET}")
+    print(f"{BOLD}{'='*60}{RESET}\n")
+
     while True:
+        step += 1
+        print(f"{DIM}[Step {step}] Calling Claude...{RESET}")
+
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-haiku-4-5-20251001",
             max_tokens=4096,
             system=system_prompt,
             tools=TOOL_SCHEMAS,
@@ -46,8 +64,15 @@ Instructions:
         # Append assistant turn to message history
         messages.append({"role": "assistant", "content": response.content})
 
+        # Print any text blocks (the agent's "thinking")
+        for block in response.content:
+            if block.type == "text" and block.text.strip():
+                print(f"\n{CYAN}[Agent thinking]{RESET}")
+                print(f"{block.text.strip()}\n")
+
         # Agent finished without calling submit_extraction
         if response.stop_reason == "end_turn":
+            print(f"\n{YELLOW}[Agent ended without submitting results]{RESET}\n")
             return {"mrn": mrn, "results": [], "error": "Agent ended without submitting results"}
 
         if response.stop_reason == "tool_use":
@@ -57,19 +82,30 @@ Instructions:
                 if block.type != "tool_use":
                     continue
 
+                print(f"{YELLOW}[Tool call] {block.name}{RESET}({json.dumps(block.input, indent=2)})")
+
                 # Route tool call to the correct function
                 fn = TOOL_MAP[block.name]
                 result = fn(**block.input)
 
                 # submit_extraction is terminal — return immediately
                 if block.name == "submit_extraction":
+                    print(f"\n{GREEN}{BOLD}[Extraction complete]{RESET}")
+                    for r in result["results"]:
+                        confidence_color = GREEN if r.get("confidence") == "high" else YELLOW
+                        print(f"  {r['variable']}: {r['value'][:80]} {confidence_color}[{r.get('confidence', '?')}]{RESET}")
+                    print()
                     return {"mrn": mrn, "results": result["results"]}
 
-                # For all other tools, append result and continue loop
+                # Summarize tool result
+                result_str = str(result)
+                preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
+                print(f"{DIM}  → Result: {preview}{RESET}\n")
+
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
-                    "content": str(result),
+                    "content": result_str,
                 })
 
             messages.append({"role": "user", "content": tool_results})
@@ -77,8 +113,7 @@ Instructions:
 
 if __name__ == "__main__":
     result = run_extraction(
-        "sandbox-mrn",
-        "COVID study",
-        ["admission_date", "remdesivir_administered"],
+        "206919",
+        "Retrospective review of medication management and clinical encounters",
+        ["active_medications", "encounter_date", "encounter_type"],
     )
-    print(result)

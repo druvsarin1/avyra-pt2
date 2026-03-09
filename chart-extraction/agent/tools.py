@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def fhir_fetch(mrn: str) -> dict:
     """Fetch all FHIR data for a patient by MRN."""
     # Resolve MRN to FHIR Patient ID
-    patient_search = fhir_client.get("Patient", {"identifier": mrn})
+    patient_search = fhir_client.get("Patient", {"identifier": f"urn:oid:1.2.840.114350.1.13.0.1.7.5.737384.14|{mrn}"})
     patient_id = patient_search["entry"][0]["resource"]["id"]
 
     result = {
@@ -28,23 +28,35 @@ def fhir_fetch(mrn: str) -> dict:
     resource_map = {
         "medications": f"MedicationRequest?patient={patient_id}",
         "conditions": f"Condition?patient={patient_id}",
-        "observations": f"Observation?patient={patient_id}",
         "encounters": f"Encounter?patient={patient_id}",
     }
 
     for key, endpoint in resource_map.items():
         try:
             resp = fhir_client.get(endpoint)
-            result[key] = [e["resource"] for e in resp.get("entry", [])]
+            entries = [e["resource"] for e in resp.get("entry", []) if e.get("resource", {}).get("resourceType") != "OperationOutcome"]
+            result[key] = entries
         except Exception as e:
             logger.warning(f"Failed to fetch {key} for patient {patient_id}: {e}")
             result[key] = []
+
+    # Fetch observations by category (Epic requires category param)
+    for category in ["vital-signs", "laboratory", "social-history"]:
+        try:
+            obs_resp = fhir_client.get(f"Observation?patient={patient_id}&category={category}")
+            for e in obs_resp.get("entry", []):
+                if e.get("resource", {}).get("resourceType") == "Observation":
+                    result["observations"].append(e["resource"])
+        except Exception as e:
+            logger.warning(f"Failed to fetch observations/{category} for patient {patient_id}: {e}")
 
     # Fetch DocumentReferences separately to extract metadata
     try:
         doc_resp = fhir_client.get(f"DocumentReference?patient={patient_id}")
         for entry in doc_resp.get("entry", []):
             resource = entry["resource"]
+            if resource.get("resourceType") == "OperationOutcome":
+                continue
             result["documents"].append({
                 "id": resource["id"],
                 "date": resource.get("date", ""),

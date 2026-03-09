@@ -22,7 +22,9 @@ class FHIRClient:
 
     def get_access_token(self):
         """Authenticate with Epic using SMART Backend Services (JWT assertion flow)."""
-        token_url = f"{self.base_url}/oauth2/token"
+        # Token endpoint is at the server root, not under /api/FHIR/R4
+        base = self.base_url.split("/api/")[0]
+        token_url = f"{base}/oauth2/token"
 
         now = int(time.time())
         claims = {
@@ -30,10 +32,17 @@ class FHIRClient:
             "sub": self.client_id,
             "aud": token_url,
             "jti": str(uuid.uuid4()),
+            "nbf": now,
+            "iat": now,
             "exp": now + 240,  # 4 minutes
         }
 
-        assertion = jwt.encode(claims, self.private_key, algorithm="RS384")
+        assertion = jwt.encode(
+            claims,
+            self.private_key,
+            algorithm="RS384",
+            headers={"kid": "chart-extraction-key-1"},
+        )
 
         resp = requests.post(
             token_url,
@@ -58,7 +67,10 @@ class FHIRClient:
         resp = requests.get(
             url,
             params=params,
-            headers={"Authorization": f"Bearer {self.access_token}"},
+            headers={
+                "Authorization": f"Bearer {self.access_token}",
+                "Accept": "application/fhir+json",
+            },
         )
         resp.raise_for_status()
         return resp.json()
